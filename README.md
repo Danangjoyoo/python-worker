@@ -7,7 +7,7 @@ A package to simplify the thread declaration directly either by using decorator 
 Developed by Danangjoyoo (c) 2020
 
 ## Repository
-- [ ] [GitHub](https://github.com/Danangjoyoo/python-worker)
+- [GitHub Repo](https://github.com/Danangjoyoo/python-worker)
 
 
 ## Examples of How To Use
