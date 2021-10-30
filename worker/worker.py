@@ -38,11 +38,12 @@ class MainThreadWorker():
 			return self.thread.is_alive()
 
 		def __execute(self):
-			self.__finishStat = False
 			try:
+				self.__finishStat = False
 				self.__ret = self.func()
+				self.__finishStat = True
 			finally:
-				if self.is_alive:
+				if not self.__finishStat:
 					try:
 						if self.aborted_by_kbInterrupt: print(self.id_mark,"KeyboardInterrupt", flush=True)
 						if self.on_abort:
@@ -118,12 +119,12 @@ class MainThreadWorker():
 			print("another possible error: on_abort, keyboard_interrupt arguments only supported for workers with specified name", flush=True)
 
 	@staticmethod
-	def run_as_Worker(func,*function_args,worker_name="",worker_on_abort=None,keyboard_interrupt=True,args=(),kargs={},**function_kargs):
+	def run_as_Worker(target,*function_args,worker_name="",worker_on_abort=None,keyboard_interrupt=True,args=(),kargs={},**function_kargs):
 		args = list(args)+list(function_args)
 		kargs.update(function_kargs)
 		@worker(worker_name,on_abort=worker_on_abort,keyboard_interrupt=bool(keyboard_interrupt))
 		def runFunction():
-			return func(*args,**kargs)
+			return target(*args,**kargs)
 		return runFunction()
 
 	@staticmethod

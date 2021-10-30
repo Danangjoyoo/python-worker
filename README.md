@@ -15,17 +15,17 @@ Developed by Danangjoyoo (c) 2020
 
 - Simple Use
 	```
-	import time
-	from worker import worker
+  import time
+  from worker import worker
 
-	@worker
-	def go(n,sleepDur):
-		for i in range(n):
-			print('AAAA', i)
-			time.sleep(sleepDur)
-		print('done')
+  @worker
+  def go(n,sleepDur):
+    for i in range(n):
+      print('AAAA', i)
+  		time.sleep(sleepDur)
+    print('done')
 
-	go(100, 0.1)
+  go(100, 0.1)
 	```
 	the code above is equals to
 	```
@@ -33,15 +33,15 @@ Developed by Danangjoyoo (c) 2020
 	import threading
 
 	def go(n=10,sleepDur=1):
-		for i in range(n):
+	for i in range(n):
 			print('AAAA', i)
 			time.sleep(sleepDur)
-		print('done')
+	print('done')
 
 	th1 = threading.Thread(target=go, args=(100,0.1,))
 	th1.start()
 	```
-    both are running 'go' function as thread, using '@worker' as decorator provide us direct access to thread
+  both are running `go` function as a thread. using `@worker` as decorator provide us direct access to thread
 
 - Simple Use with worker/process name
   ```
@@ -50,10 +50,12 @@ Developed by Danangjoyoo (c) 2020
 
   @worker('worker cool')
   def go1():
-	for i in range(10):
-		print('AAAA', i)
-		time.sleep(1)
-	print('done')
+    for i in range(10):
+      print('AAAA', i)
+      time.sleep(1)
+    print('done')
+
+  go1()
   ```
 
 ## Basic Guide
@@ -65,7 +67,7 @@ import time
 from worker import worker
 
 def onAbortExample():
-	print("this thread is aborted really cool")
+  print("this thread is aborted really cool")
 
 @worker('worker cool',on_abort=onAbortExample)
 def go(n,duration):
@@ -106,12 +108,12 @@ Some advance features for thread/worker
   from worker import run_as_Worker
 
   def go4(n=1):
-	i = 0
-	while i < 1e3/2:
-		i += n
-		print(i)
-		time.sleep(0.001)
-	return i
+    i = 0
+    while i < 1e3/2:
+      i += n
+      print(i)
+      time.sleep(0.001)
+    return i
   ```
   there are 2 methods to run these :
   1. Using simple pattern
@@ -125,7 +127,7 @@ Some advance features for thread/worker
 			```			
   1. using `threading.Thread()` pattern
 	```
-	go4_worker = run_as_Worker(func=go4,args=(10,), worker_name="go2 worker", worker_on_abort=lambda: print("horay"))
+	go4_worker = run_as_Worker(target=go4, args=(10,), worker_name="go2 worker", worker_on_abort=lambda: print("horay"))
 	```
   
 - Check workers
@@ -178,14 +180,14 @@ Some advance features for thread/worker
   abort_all_thread()
   ```
 
-- python interactive - keyboard interrupt (CTRL+C)
-  when you run your scripts on interactive mode
+## Python Interactive Shell - Keyboard Interrupt (CTRL+C)
+  When you run your scripts on interactive mode
   ```
   python -i myScript.py
   ```
   you could add an abort handler with keyboard interrupt to abort your thread.
 
-  ### Inside myScript.py
+  #### Inside myScript.py
 
   `ThreadWorker.enableKeyboardInterrupt()` allows you to abort your running workers.
   ```
@@ -205,9 +207,9 @@ Some advance features for thread/worker
   ThreadWorker.keyboard_interrupt_handler_status
   ```
 
-  You also can choose which worker allowed to aborted on keyboard interrupt
+  You also can choose which workers are allowed to be aborted on keyboard interrupt
 
-  Inside myScript.py
+  #### Inside myScript.py
   ```
   from worker import worker, ThreadWorker
   
@@ -240,8 +242,6 @@ Some advance features for thread/worker
   python -i myScript.py
   ```
   press CTRL+C while the process is running and see the results.
-
-
 
 
 ### NOTES AGAIN
