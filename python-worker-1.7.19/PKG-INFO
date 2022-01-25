@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: python-worker
-Version: 1.7.20
+Version: 1.7.19
 Summary: Simplify and master control (run and stop) the python threads (workers)
 Home-page: UNKNOWN
 Author: danangjoyoo (Agus Danangjoyo)

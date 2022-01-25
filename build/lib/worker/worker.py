@@ -1,6 +1,7 @@
 import os, time, sys, threading, ctypes, signal, keyboard
 from typing import Any, Optional, Union, overload
 from types import FunctionType
+from .__workerhelp import help_msg
 
 class ThreadWorker():
     """
@@ -258,8 +259,7 @@ class ThreadWorkerManager():
 
     @staticmethod
     def help():
-        with open("./help.txt") as f:
-            print(f.read())
+        print(help_msg)
 
     @staticmethod
     def interrupt_handler(sig, frame):

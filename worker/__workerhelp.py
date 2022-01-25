@@ -1,3 +1,4 @@
+help_msg = """
 @worker will define a function as a thread object once it run
 
 ---------------------------------------------------
@@ -173,6 +174,4 @@ from worker import abort_all_worker
 
 # run this
 abort_all_worker()
-
-
-
+"""
