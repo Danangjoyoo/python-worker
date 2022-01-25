@@ -1,420 +1,344 @@
-import os, time, sys, threading, ctypes, signal
+import os, time, sys, threading, ctypes, signal, keyboard
+from typing import Any, Optional, Union, overload
+from types import FunctionType
 
+class ThreadWorker():
+    """
+    ThreadWorker class -> worker
 
-class MainThreadWorker():
-	allWorkers = {}
-	counts = 0
-	interrupt_timeout = 10
-	keyboard_interrupt_handler_status = False
+    Return a worker object that behave as a thread running on background
+    """
+    allWorkers = {}
+    counts = 0
 
-	class ChildWorker():
-		def __init__(self, name, func, on_abort=None, enable_keyboard_interrupt=True):
-			self.name = name
-			self.id = ThreadWorker.counts
-			self.func = func
-			self.__finishStat = False
-			self.__ret = None
-			self.thread = None
-			self.is_aborted = False
-			self.id_mark = f"[id={self.id}][{self.name}]"
-			self.aborted_by_kbInterrupt = False
-			self.enable_keyboard_interrupt = enable_keyboard_interrupt
-			self.on_abort = on_abort
+    def __init__(self, name, func, on_abort=None, enable_keyboard_interrupt=True):
+        self.name = name
+        self.id = ThreadWorker.counts
+        self.func = func
+        self.__finishStat = False
+        self.__ret = None
+        self.thread = None
+        self.is_aborted = False
+        self.id_mark = f"[id={self.id}][{self.name}]"
+        self.aborted_by_kbInterrupt = False
+        self.enable_keyboard_interrupt = enable_keyboard_interrupt
+        self.on_abort = on_abort
 
-		@property		
-		def finished(self):
-			return self.__finishStat
+    @property       
+    def finished(self):
+        return self.__finishStat
 
-		@property
-		def ret(self):
-			if self.is_aborted and not self.__finishStat:
-				print(self.id_mark,"return is None due to aborted before finished", flush=True)
-				return None
-			else:
-				return self.__ret
+    @property
+    def ret(self):
+        return self.__ret
 
-		@property
-		def is_alive(self):
-			return self.thread.is_alive()
+    @property
+    def is_alive(self):
+        return self.thread.is_alive()
 
-		def __execute(self):
-			try:
-				self.__finishStat = False
-				self.__ret = self.func()
-				self.__finishStat = True
-			finally:
-				if not self.__finishStat:
-					try:
-						if self.aborted_by_kbInterrupt: print(self.id_mark,"KeyboardInterrupt", flush=True)
-						if self.on_abort:
-							self.on_abort()
-					except Exception as e:						
-						print(self.id_mark,"OnAbortError",str(type(self.on_abort)), flush=True)
-			self.__finishStat = True
+    def __execute(self):
+        try:
+            self.__finishStat = False
+            self.__ret = self.func()
+            self.__finishStat = True
+        finally:
+            if not self.__finishStat:
+                try:
+                    if self.aborted_by_kbInterrupt: print(self.id_mark,"KeyboardInterrupt", flush=True)
+                    if self.on_abort:
+                        self.on_abort()
+                except Exception as e:                      
+                    print(self.id_mark,"OnAbortError",str(type(self.on_abort)), flush=True)
 
-		def work(self):
-			self.thread = threading.Thread(target=self.__execute)
-			self.thread.start()
+    def work(self):
+        self.thread = threading.Thread(target=self.__execute)
+        self.thread.start()
 
-		def interrupt(self):
-			if self.enable_keyboard_interrupt:
-				self.abort()
+    def interrupt(self):
+        if self.enable_keyboard_interrupt:
+            self.abort()
 
-		def abort(self):
-			if self.thread:
-				self.is_aborted = True
-				ThreadWorker.abort_thread(self.thread)
+    def abort(self):
+        """
+        Abort the running worker
+        """
+        if self.thread:
+            self.is_aborted = True
+            ThreadWorkerManager.abort_thread(self.thread)
 
-		def wait(self):
-			while not self.finished: pass
-			self.__destroy()
-			return True
+    def wait(self):
+        """
+        Wait the worker to finish
+        """
+        if self.is_alive:
+            while not self.finished: time.sleep(0.005)
+            return True
+        return False
 
-		def __destroy(self):
-			del ThreadWorker.allWorkers[self.name]
+    def await_worker(self) -> Any:
+        """
+        wait the worker to finish and get it returns
+        """
+        self.wait()
+        return self.__ret
 
-	@staticmethod
-	def worker(*margs,**kargs):
-		on_abort = None
-		interrupt = True		
-		if kargs:
-			if "on_abort" in kargs:
-				on_abort = kargs["on_abort"]
-			if "keyboard_interrupt" in kargs:
-				interrupt = bool(kargs["keyboard_interrupt"])
-			if "interrupt" in kargs:
-				interrupt = bool(kargs["interrupt"])
-			if not margs:
-				return print("Error: on_abort requires worker name on decorator\nPlease read ThreadWorker.help()",flush=True)
-		if margs:
-			if str(type(margs[0])) == "<class 'function'>":
-				def register(*args,**kargs):
-					workerName = 'worker'+str(ThreadWorker.counts)
-					ThreadWorker.allWorkers[workerName] = ThreadWorker.ChildWorker(
-						workerName, 
-						lambda: margs[0](*args,**kargs),
-						on_abort, interrupt)
-					ThreadWorker.allWorkers[workerName].work()
-					ThreadWorker.counts += 1
-					return ThreadWorker.allWorkers[workerName]
-				return register
-			elif type(margs[0]) == str:
-				def applying(func):
-					def register(*args,**kargs):
-						workerName = margs[0] if margs[0] not in ThreadWorker.allWorkers.keys() else margs[0]+str(ThreadWorker.counts)
-						ThreadWorker.allWorkers[workerName] = ThreadWorker.ChildWorker(
-							workerName,
-							lambda: func(*args,**kargs),
-							on_abort, interrupt)
-						ThreadWorker.allWorkers[workerName].work()
-						ThreadWorker.counts += 1
-						return ThreadWorker.allWorkers[workerName]
-					return register
-				return applying
-			else:
-				print('Error: Worker Decorator only support str and function!\nPlease read ThreadWorker.help()', flush=True)
-				print("another possible error: on_abort, keyboard_interrupt arguments only supported for workers with specified name", flush=True)
-		else:
-			print('Error: Worker Decorator only support str and function!\nPlease read ThreadWorker.help()', flush=True)
-			print("another possible error: on_abort, keyboard_interrupt arguments only supported for workers with specified name", flush=True)
+    def __destroy(self):
+        try:
+            self.abort()
+            del ThreadWorkerManager.allWorkers[self.name]
+        except Exception as e:
+            pass
 
-	@staticmethod
-	def run_as_Worker(target,*function_args,worker_name="",worker_on_abort=None,keyboard_interrupt=True,args=(),kargs={},**function_kargs):
-		args = list(args)+list(function_args)
-		kargs.update(function_kargs)
-		@worker(worker_name,on_abort=worker_on_abort,keyboard_interrupt=bool(keyboard_interrupt))
-		def runFunction():
-			return target(*args,**kargs)
-		return runFunction()
+class ThreadWorkerManager():
+    allWorkers = {}
+    counts = 0
+    interrupt_timeout = 10
+    keyboard_interrupt_handler_status = False
 
-	@staticmethod
-	def wait(*args):
-		for i in args: i.wait()
+    @staticmethod
+    def worker(
+            *margs,
+            name: str = "",
+            on_abort: Optional[FunctionType] = None,
+            keyboard_interrupt: bool = False,
+            **kargs
+        ):
+        """
+        worker(function) -> threaded-function
 
-	@staticmethod
-	def list(active_only=False):
-		formatStr = "{:<5}|{:<20}|{:<6}|{:<15}"
-		lineSeparator = lambda: print("{:=<55}".format(""))
-		lineSeparator()
-		print(formatStr.format("ID","Name","Active","Address"))
-		lineSeparator()
-		for x, key in enumerate(ThreadWorker.allWorkers):
-			w = ThreadWorker.allWorkers[key]
-			f = str(w).split(">")[0].split(' ')[3][:15]
-			pline = lambda: print(formatStr.format(w.id,w.name,str(w.is_alive),f))
-			if not active_only:
-				pline()
-			else:
-				if w.is_alive: pline()
-		lineSeparator()
+        A worker decorator.
+        Turn a main-thread function into a background-thread function automatically
+        """
+        if margs:
+            if str(type(margs[0])) == "<class 'function'>":
+                if not name: name = 'worker'+str(ThreadWorkerManager.counts)
+                def register(*args,**kargs):
+                    ThreadWorkerManager.allWorkers[name] = ThreadWorker(
+                        name, 
+                        lambda: margs[0](*args,**kargs),
+                        on_abort, keyboard_interrupt)
+                    ThreadWorkerManager.allWorkers[name].work()
+                    ThreadWorkerManager.counts += 1
+                    return ThreadWorkerManager.allWorkers[name]
+                return register            
+        else:
+            return ThreadWorkerManager._workerDefinitionError()
+    
+    @staticmethod
+    def _workerDefinitionError():
+        e = """
+        Error: Worker Decorator function or method!
+        Please read ThreadWorkerManager.help()
+        """
+        raise BaseException(e)
 
-	@staticmethod
-	def clear():
-		ThreadWorker.allWorkers = {}
+    @staticmethod
+    def run_as_worker(
+            target: FunctionType,
+            *function_args,
+            worker_name: Optional[str] = "",
+            worker_on_abort: Optional[FunctionType] = None,
+            keyboard_interrupt: bool =True,
+            args: Optional[Union[list, tuple]] = (),
+            kargs: Optional[dict] = {},
+            **function_kargs
+        ):
+        """
+        Run your existed function that is not defined as a worker to behave like worker
+        """
+        args = list(args)+list(function_args)
+        kargs.update(function_kargs)
+        @worker(worker_name,on_abort=worker_on_abort,keyboard_interrupt=bool(keyboard_interrupt))
+        def runFunction():
+            return target(*args,**kargs)
+        return runFunction()
 
-	@staticmethod
-	def abort_thread(threadObject):
-		try:
-			th_id = threadObject.native_id
-		except:
-			th_id = threadObject.ident
-		return ctypes.pythonapi.PyThreadState_SetAsyncExc(th_id, ctypes.py_object(SystemExit))
+    @staticmethod
+    def wait(*args):
+        for i in args: i.wait()
 
-	@staticmethod
-	def abort_worker(workerObject):
-		try:
-			if all([forbidden not in str(workerObject.thread) for forbidden in ["MainThread","daemon"]]):
-				ThreadWorker.abort_thread(workerObject.thread)
-		except Exception as e:
-			print(e, flush=True)
+    @staticmethod
+    def list(active_only=False):
+        formatStr = "{:<5}|{:<20}|{:<6}|{:<15}"
+        lineSeparator = lambda: print("{:=<55}".format(""))
+        lineSeparator()
+        print(formatStr.format("ID","Name","Active","Address"))
+        lineSeparator()
+        for x, key in enumerate(ThreadWorkerManager.allWorkers):
+            w = ThreadWorkerManager.allWorkers[key]
+            f = str(w).split(">")[0].split(' ')[3][:15]
+            pline = lambda: print(formatStr.format(w.id,w.name,str(w.is_alive),f))
+            if not active_only:
+                pline()
+            else:
+                if w.is_alive: pline()
+        lineSeparator()
 
-	@staticmethod
-	def abort_all_thread():
-		for th in threading.enumerate():
-			if all([forbidden not in str(th) for forbidden in ["MainThread","daemon"]]):
-				ThreadWorker.abort_thread(th)
+    @staticmethod
+    def clear():
+        ThreadWorkerManager.allWorkers = {}
 
-	@staticmethod
-	def abort_all_worker(keyboard_interrupt_only=False):
-		if keyboard_interrupt_only:
-			for key in ThreadWorker.allWorkers:
-				worker = ThreadWorker.allWorkers[key]
-				worker.interrupt()
-		else:
-			for key in ThreadWorker.allWorkers:
-				worker = ThreadWorker.allWorkers[key]
-				worker.abort()
+    @staticmethod
+    def abort_thread(threadObject: threading.Thread):
+        """
+        Abort specific thread object
+        """
+        res = 0
+        try:
+            if not res:
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(threadObject.native_id, ctypes.py_object(SystemExit))
+        except:
+            pass
+        try:
+            if not res:
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(threadObject.ident, ctypes.py_object(SystemExit))
+        except:
+            pass
+        try:
+            if not res:
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(threadObject.native_id), ctypes.py_object(SystemExit))
+        except:
+            pass
+        try:
+            if not res:
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(threadObject.ident), ctypes.py_object(SystemExit))
+        except:
+            pass
+        try:
+            if not res:
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(threadObject.native_id), ctypes.py_object(SystemExit))
+        except:
+            pass
+        try:
+            if not res:
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(threadObject.ident), ctypes.py_object(SystemExit))
+        except:
+            pass
+        return res
 
-	@staticmethod
-	def help():
-		global _help_message_only
-		ss = _help_message_only.splitlines()
-		prints = False
-		for i,s in enumerate(ss[:-1]):
-			if '?!@^^^' in s and s[0] == "?": 
-				prints = True
-				continue
-			if prints: print(s[:-1])
+    @staticmethod
+    def abort_worker(workerObject: ThreadWorker):
+        """
+        Abort specific worker object
+        """
+        try:
+            if all([forbidden not in str(workerObject.thread) for forbidden in ["MainThread","daemon"]]):
+                ThreadWorkerManager.abort_thread(workerObject.thread)
+        except Exception as e:
+            print(e, flush=True)
 
-	@staticmethod
-	def interrupt_handler(sig, frame):
-		timeout = False
-		if any([ThreadWorker.allWorkers[key].is_alive for key in ThreadWorker.allWorkers]):
-			try:
-				for key in ThreadWorker.allWorkers:
-					tw = ThreadWorker.allWorkers[key]
-					if tw.is_alive and tw.enable_keyboard_interrupt:
-						tw.aborted_by_kbInterrupt = True
-				stat = any([ThreadWorker.allWorkers[key].is_alive for key in ThreadWorker.allWorkers])
-				now = time.time()
-				if stat: print("[WORKER] Aborting..", flush=True)
-				while stat:
-					[ThreadWorker.abort_all_worker(keyboard_interrupt_only=True) for i in range(10)]
-					stat = any([ThreadWorker.allWorkers[key].is_alive for key in ThreadWorker.allWorkers])					
-					time.sleep(0.01)
-					if time.time()-now > MainThreadWorker.interrupt_timeout:
-						timeout = True
-						break
-			finally:
-				if not timeout:
-					print("\n[WORKER] All Workers Aborted", flush=True)
-				else:
-					print("[WORKER] Aborting Timeout", flush=True)
-		else:
-			return signal.default_int_handler()
+    @staticmethod
+    def abort_all_thread():
+        """
+        Abort all runnning background thread immeadiately.
 
-	@staticmethod
-	def enableKeyboardInterrupt():
-		signal.signal(signal.SIGINT, ThreadWorker.interrupt_handler)
-		MainThreadWorker.keyboard_interrupt_handler_status = True
+        No matter if it's a worker or not, it will be aborted. No background thread is running.        
+        """
+        for th in threading.enumerate():
+            if all([forbidden not in str(th) for forbidden in ["MainThread","daemon"]]):
+                ThreadWorkerManager.abort_thread(th)
 
-	@staticmethod
-	def disableKeyboardInterrupt():
-		signal.signal(signal.SIGINT, signal.default_int_handler)
-		MainThreadWorker.keyboard_interrupt_handler_status = False
+    @staticmethod
+    def abort_all_worker(keyboard_interrupt_only=False):
+        """
+        Abort all active worker immeadiately
+
+        :params keyboard_interrupt_only: bool -> enable to only abort the worker which have the keyboard interrupt enabled
+
+        If some workers cannot aborted, it will retry the abortion for 10 times before it failing to abort.
+        """
+        if keyboard_interrupt_only:
+            for key in ThreadWorkerManager.allWorkers:
+                worker = ThreadWorkerManager.allWorkers[key]
+                worker.interrupt()
+        else:
+            for key in ThreadWorkerManager.allWorkers:
+                worker = ThreadWorkerManager.allWorkers[key]
+                worker.abort()
+
+    @staticmethod
+    def help():
+        with open("./help.txt") as f:
+            print(f.read())
+
+    @staticmethod
+    def interrupt_handler(sig, frame):
+        timeout = False
+        getAliveThreadWithInterrupt = lambda: any([ThreadWorkerManager.allWorkers[key].is_alive for key in ThreadWorkerManager.allWorkers if ThreadWorker.allWorkers[key].enable_keyboard_interrupt])
+        if getAliveThreadWithInterrupt():
+            try:
+                for key in ThreadWorkerManager.allWorkers:
+                    tw = ThreadWorkerManager.allWorkers[key]
+                    if tw.is_alive and tw.enable_keyboard_interrupt:
+                        tw.aborted_by_kbInterrupt = True
+                stat = getAliveThreadWithInterrupt()
+                now = time.time()
+                if stat: print("[WORKER] Aborting..", flush=True)
+                while stat:
+                    [ThreadWorkerManager.abort_all_worker(keyboard_interrupt_only=True) for i in range(10)]
+                    stat = getAliveThreadWithInterrupt()
+                    time.sleep(0.01)
+                    if time.time()-now > ThreadWorkerManager.interrupt_timeout:
+                        timeout = True
+                        break
+            finally:
+                if not timeout:
+                    print("\n[WORKER] All Workers Aborted", flush=True)
+                else:
+                    print("[WORKER] Aborting Timeout", flush=True)
+        else:
+            return signal.default_int_handler()
+
+    __systemExitThread = None
+
+    @staticmethod
+    def __exitThread():
+        @ThreadWorkerManager.worker("systemExit",keyboard_interrupt=False)
+        def go():
+            while True:
+                time.sleep(0.1)
+                if keyboard.is_pressed("CTRL+Z"):
+                    while all([w.is_alive for w in ThreadWorkerManager.allWorkers.values()]):
+                        for key in ThreadWorkerManager.allWorkers:
+                            if "systemExit" not in key:
+                                ThreadWorkerManager.allWorkers[key].abort()
+                        time.sleep(0.1)
+                        break
+                    break
+            ThreadWorkerManager.abort_all_thread()
+        ThreadWorkerManager.__systemExitThread = go()
+
+    @staticmethod
+    def enableKeyboardInterrupt(enable_exit_thread: bool = False):
+        """
+        Enable the keyboard interrupt (CTRL+C) to abort the running thread
+
+        :params enable_exit_thread: bool - set it true to activate CTRL+Z abort system
+        - ex: enableKeyboardInterrupt(enable_exit_thread=True)
+        """
+        if not ThreadWorkerManager.keyboard_interrupt_handler_status:
+            signal.signal(signal.SIGINT, ThreadWorker.interrupt_handler)
+            ThreadWorkerManager.keyboard_interrupt_handler_status = True
+            if enable_exit_thread:
+                ThreadWorkerManager.__exitThread()
+
+    @staticmethod
+    def disableKeyboardInterrupt():
+        """
+        Disable the keyboard interrupt (CTRL+C) to abort the running thread
+        """
+        if ThreadWorkerManager.keyboard_interrupt_handler_status:
+            signal.signal(signal.SIGINT, signal.default_int_handler)
+            ThreadWorkerManager.keyboard_interrupt_handler_status = False
+            if ThreadWorkerManager.__systemExitThread:
+                ThreadWorkerManager.__systemExitThread.abort()
 
 ### SHORTCUT ###
-ThreadWorker = MainThreadWorker()
-worker = ThreadWorker.worker
-run_as_Worker = ThreadWorker.run_as_Worker
-abort_worker = ThreadWorker.abort_worker
-abort_all_worker = ThreadWorker.abort_all_worker
-abort_thread = ThreadWorker.abort_thread
-abort_all_thread = ThreadWorker.abort_all_thread
-enableKeyboardInterrupt = ThreadWorker.enableKeyboardInterrupt
-disableKeyboardInterrupt = ThreadWorker.disableKeyboardInterrupt
-
-
-_help_message_only = """
-
-?!@^^^
-######## HELP ######## HELP ######## HELP ######## HELP ######## HELP ######## HELP ########
-[help]	
-[help]	@worker will define a function as a thread object once it run
-[help]	
-[help]	---------------------------------------------------
-[help]	SIMPLE USE (example)
-[help]	###################################################
-[help]	from worker import worker
-[help]	
-[help]	@worker #-> this is the threading decorator
-[help]	def go():
-[help]		for i in range(10):
-[help]			print('AAAA', i)
-[help]			time.sleep(1)
-[help]		print('done')
-[help]	
-[help]	@worker('worker ganteng') #-> this is the threading decorator with process name
-[help]	def go1():
-[help]		for i in range(10):
-[help]			print('AAAA', i)
-[help]			time.sleep(1)
-[help]		print('done')
-[help]	
-[help]	# on_abort -> when the worker is aborted, it will raise on_abort
-[help]	# on_abort -> workername is required when using ob_abort params
-[help]	@worker('worker cool',on_abort=lambda: print("its aborted!")) 
-[help]	def coba():
-[help]		a = go()
-[help]		#-> wait() will block the next line till go() is done
-[help]		a.wait()
-[help]		print('HAHAHAHAHH')
-[help]	
-[help]	-----------------------------------------------------
-[help]	AVAILABLE MODEL
-[help]	#####################################################
-[help]	set worker decorator only have 3 model
-[help]	
-[help]	++++++ model 1 ++++++
-[help]	@worker
-[help]	def go1():
-[help]		i = 0
-[help]		while 1:
-[help]			i+=1
-[help]			time.sleep(0.005)
-[help]		return i
-[help]	
-[help]	++++++ model 2 ++++++
-[help]	@worker("gogogo")
-[help]	def go2(n=1):
-[help]		i = 0
-[help]		while 1:
-[help]			i+=n
-[help]			time.sleep(0.005)
-[help]		return i
-[help]	
-[help]	++++++ model 3 ++++++
-[help]	@worker("gogagaaaa",on_abort=lambda: print("HAHAHAHAH"))
-[help]	def go3():
-[help]		i = 0
-[help]		while 1:
-[help]			i+=1
-[help]			time.sleep(0.005)
-[help]		return i
-[help] 
-[help] 
-[help] HOW TO RUN DEFINED WORKER?
-[help] #####################################
-[help] 
-[help] go2(n=100)
-[help] # or
-[help] go2(100)
-[help] # or
-[help] a = go1()
-[help] # or
-[help] b = go2(300)
-[help] 
-[help] 
-[help] 
-[help] 
-[help] AVAILABLE "run as worker" MODEL
-[help] ##########################################################
-[help] runAsWorker only works these ways
-[help] 
-[help] 
-[help] def go4(n=1):
-[help] 	i = 0
-[help] 	while i < 1e3/2:
-[help] 		i += n
-[help] 		print(i)
-[help] 		time.sleep(0.001)
-[help] 	return i
-[help] 
-[help] go4_return = runAsWorker(func=go4,args=(10,),worker_name="go2 worker",worker_on_abort=lambda: print("horay"))
-[help] # or
-[help] go4_return = runAsWorker(go4,10)
-[help] # or
-[help] go4_return = runAsWorker(go4,n=10)
-[help] # or
-[help] go4_return = runAsWorker(go4,n=10,worker_name="go2 worker",worker_on_abort=lambda: print("horay"))
-[help] # or
-[help] go4_return = runAsWorker(func=go4,args=(10,))
-[help] 
-[help] 
-[help] 
-[help] 
-[help] =========================================================
-[help] ---------------------- ADVANCED USE ---------------------
-[help] =========================================================
-[help] 
-[help] # example using undefined worker function
-[help] 
-[help] go4_return = runAsWorker(func=go4,args=(10,))
-[help] 
-[help] # example using defined function with worker decorator '@worker'
-[help] 
-[help] go2_return = go2(100)
-[help] 
-[help] 
-[help] 
-[help] HOW TO GET THE RETURN?
-[help] ##########################################################
-[help] 
-[help] go4_return = go4_return.ret
-[help] 
-[help] go2_return = go2_return.ret
-[help] 
-[help] 
-[help] 
-[help] HOW TO CHECK THE THREAD IS STILL RUNNING?
-[help] ########################################################
-[help] 
-[help] go4_is_alive = go4_return.is_alive
-[help] 
-[help] go2_is_alive = go2_return.is_alive
-[help] 
-[help] 
-[help] 
-[help] HOW TO ABORT RUNNING WORKER?
-[help] ########################################################
-[help] 
-[help] go4_return.abort()
-[help] 
-[help] go2_return.abort()
-[help] 
-[help] # or
-[help] 
-[help] # import this in your scripts
-[help] from worker import abort_all_worker
-[help] 
-[help] 
-[help] 
-[help] 
-[help] 
-[help] 
-[help] HOW TO ABORT ALL RUNNING WORKER?
-[help] ########################################################
-[help] 
-[help] # import this in your scripts
-[help] from worker import abort_all_worker
-[help] 
-[help] 
-[help] # run this
-[help] abort_all_worker()
-[help] 
-[help] 
-[help] 
-[help] 
-######## HELP ######## HELP ######## HELP ######## HELP ######## HELP ######## HELP ########
-
-"""
+worker = ThreadWorkerManager.worker
+run_as_Worker = ThreadWorkerManager.run_as_worker
+abort_worker = ThreadWorkerManager.abort_worker
+abort_all_worker = ThreadWorkerManager.abort_all_worker
+abort_thread = ThreadWorkerManager.abort_thread
+abort_all_thread = ThreadWorkerManager.abort_all_thread
+enableKeyboardInterrupt = ThreadWorkerManager.enableKeyboardInterrupt
+disableKeyboardInterrupt = ThreadWorkerManager.disableKeyboardInterrupt
