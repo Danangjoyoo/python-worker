@@ -27,7 +27,7 @@ def go(n,sleepDur):
 
 go(100, 0.1)
 ```
-	the code above is equals to
+the code above is equals to
 ```
 import time
 import threading
