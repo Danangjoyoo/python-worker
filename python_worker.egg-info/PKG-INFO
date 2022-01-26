@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: python-worker
-Version: 1.7.20
+Version: 1.8.0
 Summary: Simplify and master control (run and stop) the python threads (workers)
 Home-page: UNKNOWN
 Author: danangjoyoo (Agus Danangjoyo)
@@ -61,6 +61,17 @@ Description: # python-worker
         from worker import worker
         
         @worker(name='worker cool')
+        def go1():
+          for i in range(10):
+            print('AAAA', i)
+            time.sleep(1)
+          print('done')
+        
+        go1()
+        ```
+        or
+        ```
+        @worker('worker cool')
         def go1():
           for i in range(10):
             print('AAAA', i)
@@ -154,6 +165,30 @@ Description: # python-worker
         ## All active/running workers only
         ThreadWorkerManager.list(active_only=True)
         ```
+        it will return the information
+        ```
+        >>> ThreadWorkerManager.list()
+        ==============================================================
+        ID   |Name                |Active|Address        | WorkTime (s)   
+        ==============================================================
+        0    |worker              |True  |0x7fdf1a977af0 | 4.97           
+        1    |worker1             |True  |0x7fdf1a73d640 | 4.07           
+        2    |worker2             |True  |0x7fdf1a73d9d0 | 3.83           
+        3    |worker3             |True  |0x7fdf1a73dd00 | 3.62           
+        4    |worker4             |True  |0x7fdf1a74b070 | 3.38           
+        ==============================================================
+        >>> ThreadWorkerManager.list()
+        ==============================================================
+        ID   |Name                |Active|Address        | WorkTime (s)   
+        ==============================================================
+        0    |worker              |True  |0x7fdf1a977af0 | 7.19           
+        1    |worker1             |True  |0x7fdf1a73d640 | 6.29           
+        2    |worker2             |True  |0x7fdf1a73d9d0 | 6.06           
+        3    |worker3             |True  |0x7fdf1a73dd00 | 5.84           
+        4    |worker4             |True  |0x7fdf1a74b070 | 5.6            
+        ==============================================================
+        ```
+        
         
         - abort specific workers
         ```
@@ -258,7 +293,7 @@ Description: # python-worker
           python -i myScript.py
           ```
           press CTRL+C while the process is running and see the results.
-Keywords: python,threading,worker,abort thread,thread stopped,simple thread
+Keywords: python,threading,worker,abort thread,thread stopper,thread manager,simple thread,thread monitor
 Platform: UNKNOWN
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers

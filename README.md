@@ -61,6 +61,17 @@ def go1():
 
 go1()
 ```
+or
+```
+@worker('worker cool')
+def go1():
+  for i in range(10):
+    print('AAAA', i)
+    time.sleep(1)
+  print('done')
+
+go1()
+```
 
 ## Basic Guide
 Getting return, wait and stop the thread/worker
@@ -146,6 +157,30 @@ ThreadWorkerManager.list()
 ## All active/running workers only
 ThreadWorkerManager.list(active_only=True)
 ```
+it will return the information
+```
+>>> ThreadWorkerManager.list()
+==============================================================
+ID   |Name                |Active|Address        | WorkTime (s)   
+==============================================================
+0    |worker              |True  |0x7fdf1a977af0 | 4.97           
+1    |worker1             |True  |0x7fdf1a73d640 | 4.07           
+2    |worker2             |True  |0x7fdf1a73d9d0 | 3.83           
+3    |worker3             |True  |0x7fdf1a73dd00 | 3.62           
+4    |worker4             |True  |0x7fdf1a74b070 | 3.38           
+==============================================================
+>>> ThreadWorkerManager.list()
+==============================================================
+ID   |Name                |Active|Address        | WorkTime (s)   
+==============================================================
+0    |worker              |True  |0x7fdf1a977af0 | 7.19           
+1    |worker1             |True  |0x7fdf1a73d640 | 6.29           
+2    |worker2             |True  |0x7fdf1a73d9d0 | 6.06           
+3    |worker3             |True  |0x7fdf1a73dd00 | 5.84           
+4    |worker4             |True  |0x7fdf1a74b070 | 5.6            
+==============================================================
+```
+
 
 - abort specific workers
 ```

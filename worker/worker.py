@@ -9,13 +9,17 @@ class ThreadWorker():
 
     Return a worker object that behave as a thread running on background
     """
-    allWorkers = {}
-    counts = 0
 
-    def __init__(self, name, func, on_abort=None, enable_keyboard_interrupt=True):
+    def __init__(self, func, name="", on_abort=None, enable_keyboard_interrupt=True):
+        if not name: name = "worker"
+        if name in ThreadWorkerManager.allWorkers:
+            name = name+str(ThreadWorkerManager.counts)
+        ThreadWorkerManager.allWorkers[name] = self
+        ThreadWorkerManager.counts += 1
         self.name = name
-        self.id = ThreadWorker.counts
-        self.func = func
+        self.id = ThreadWorkerManager.counts
+        self.func = None
+        self.rawfunc = func
         self.__finishStat = False
         self.__ret = None
         self.thread = None
@@ -24,6 +28,27 @@ class ThreadWorker():
         self.aborted_by_kbInterrupt = False
         self.enable_keyboard_interrupt = enable_keyboard_interrupt
         self.on_abort = on_abort
+        self.start_time = time.perf_counter()
+        self.__work_time = 0
+    
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        self.func = lambda: self.rawfunc(*args, **kwargs)        
+        self.work()
+        return self
+
+    def __get_working_time(self):
+        t = time.perf_counter()-self.start_time
+        lst = len(str(t).split(".")[0])
+        if lst < 10:
+            return round(t, 10-lst)
+        else:
+            return int(t)
+
+    @property
+    def work_time(self):
+        if self.thread and not self.finished:
+            self.__work_time = self.__get_working_time()
+        return self.__work_time
 
     @property       
     def finished(self):
@@ -40,10 +65,15 @@ class ThreadWorker():
     def __execute(self):
         try:
             self.__finishStat = False
-            self.__ret = self.func()
+            if self.func:
+                self.__ret = self.func()
+            else:
+                self.__ret = self.rawfunc()
             self.__finishStat = True
         finally:
+            self.__work_time = self.__get_working_time()
             if not self.__finishStat:
+                self.__finishStat = True
                 try:
                     if self.aborted_by_kbInterrupt: print(self.id_mark,"KeyboardInterrupt", flush=True)
                     if self.on_abort:
@@ -90,56 +120,70 @@ class ThreadWorker():
         except Exception as e:
             pass
 
-class ThreadWorkerManager():
+class StaticThreadWorkerManager():
+    """
+    ThreadWorker Manager.
+
+    Class to manage your worker and thread (abort, list, monitor)
+    """
     allWorkers = {}
     counts = 0
     interrupt_timeout = 10
     keyboard_interrupt_handler_status = False
 
     @staticmethod
-    def worker(
-            *margs,
-            name: str = "",
-            on_abort: Optional[FunctionType] = None,
-            keyboard_interrupt: bool = False,
-            **kargs
-        ):
-        """
-        worker(function) -> threaded-function
-
-        A worker decorator.
-        Turn a main-thread function into a background-thread function automatically
-        """
+    def create_worker(*margs,**kargs):
+        on_abort = None
+        interrupt = True		
+        if kargs:
+            if "on_abort" in kargs: 
+                on_abort = kargs["on_abort"]
+            if "keyboard_interrupt" in kargs: 
+                interrupt = bool(kargs["keyboard_interrupt"])
+            if "interrupt" in kargs: 
+                interrupt = bool(kargs["interrupt"])
+            if not margs: 
+                e = "Error: on_abort requires worker name on decorator\nPlease read ThreadWorkerManager.help()"
+                raise BaseException(e)
         if margs:
-            if str(type(margs[0])) == "<class 'function'>":
-                if not name: name = 'worker'+str(ThreadWorkerManager.counts)
+            if type(margs[0]) == FunctionType:
                 def register(*args,**kargs):
-                    ThreadWorkerManager.allWorkers[name] = ThreadWorker(
-                        name, 
-                        lambda: margs[0](*args,**kargs),
-                        on_abort, keyboard_interrupt)
-                    ThreadWorkerManager.allWorkers[name].work()
-                    ThreadWorkerManager.counts += 1
-                    return ThreadWorkerManager.allWorkers[name]
-                return register            
+                    w = ThreadWorker(
+						lambda: margs[0](*args,**kargs),
+						"worker", 
+						on_abort, interrupt)
+                    w.work()
+                    return w
+                return register
+            elif type(margs[0]) == str:
+                def applying(func):
+                    def register(*args,**kargs):
+                        workerName = margs[0]
+                        w = ThreadWorker(
+                            lambda: func(*args,**kargs),
+                            workerName,
+                            on_abort, interrupt)
+                        w.work()
+                        return w                        
+                    return register
+                return applying
+            else:
+                return ThreadWorkerManager._workerDefinitionError()
         else:
             return ThreadWorkerManager._workerDefinitionError()
     
     @staticmethod
     def _workerDefinitionError():
-        e = """
-        Error: Worker Decorator function or method!
-        Please read ThreadWorkerManager.help()
-        """
+        e = "Error: Worker Decorator function or method! Please read ThreadWorkerManager.help()"
         raise BaseException(e)
 
     @staticmethod
     def run_as_worker(
             target: FunctionType,
             *function_args,
-            worker_name: Optional[str] = "",
-            worker_on_abort: Optional[FunctionType] = None,
-            keyboard_interrupt: bool =True,
+            _worker_name: Optional[str] = "",
+            _worker_on_abort: Optional[FunctionType] = None,
+            _keyboard_interrupt: bool =True,
             args: Optional[Union[list, tuple]] = (),
             kargs: Optional[dict] = {},
             **function_kargs
@@ -149,26 +193,39 @@ class ThreadWorkerManager():
         """
         args = list(args)+list(function_args)
         kargs.update(function_kargs)
-        @worker(worker_name,on_abort=worker_on_abort,keyboard_interrupt=bool(keyboard_interrupt))
+        @worker(_worker_name,on_abort=_worker_on_abort,keyboard_interrupt=_keyboard_interrupt)
         def runFunction():
             return target(*args,**kargs)
         return runFunction()
 
     @staticmethod
-    def wait(*args):
-        for i in args: i.wait()
+    def wait(*workers: ThreadWorker):
+        """
+        wait all workers to be done
+        """
+        for w in workers: w.wait()
+    
+    @staticmethod
+    def await_workers(*workers: ThreadWorker) -> dict:
+        """
+        await all workers to be done and return a dict of results
+        """
+        res = {}
+        for w in workers:
+            res[w.name] = w.await_worker()
+        return res
 
     @staticmethod
     def list(active_only=False):
-        formatStr = "{:<5}|{:<20}|{:<6}|{:<15}"
-        lineSeparator = lambda: print("{:=<55}".format(""))
+        formatStr = "{:<5}|{:<20}|{:<6}|{:<15}| {:<15}"
+        lineSeparator = lambda: print("{:=<62}".format(""))
         lineSeparator()
-        print(formatStr.format("ID","Name","Active","Address"))
+        print(formatStr.format("ID","Name","Active","Address","WorkTime (s)"))
         lineSeparator()
         for x, key in enumerate(ThreadWorkerManager.allWorkers):
             w = ThreadWorkerManager.allWorkers[key]
             f = str(w).split(">")[0].split(' ')[3][:15]
-            pline = lambda: print(formatStr.format(w.id,w.name,str(w.is_alive),f))
+            pline = lambda: print(formatStr.format(w.id,w.name,str(w.is_alive),f,w.work_time))
             if not active_only:
                 pline()
             else:
@@ -264,7 +321,7 @@ class ThreadWorkerManager():
     @staticmethod
     def interrupt_handler(sig, frame):
         timeout = False
-        getAliveThreadWithInterrupt = lambda: any([ThreadWorkerManager.allWorkers[key].is_alive for key in ThreadWorkerManager.allWorkers if ThreadWorker.allWorkers[key].enable_keyboard_interrupt])
+        getAliveThreadWithInterrupt = lambda: any([ThreadWorkerManager.allWorkers[key].is_alive for key in ThreadWorkerManager.allWorkers if ThreadWorkerManager.allWorkers[key].enable_keyboard_interrupt])
         if getAliveThreadWithInterrupt():
             try:
                 for key in ThreadWorkerManager.allWorkers:
@@ -317,7 +374,7 @@ class ThreadWorkerManager():
         - ex: enableKeyboardInterrupt(enable_exit_thread=True)
         """
         if not ThreadWorkerManager.keyboard_interrupt_handler_status:
-            signal.signal(signal.SIGINT, ThreadWorker.interrupt_handler)
+            signal.signal(signal.SIGINT, ThreadWorkerManager.interrupt_handler)
             ThreadWorkerManager.keyboard_interrupt_handler_status = True
             if enable_exit_thread:
                 ThreadWorkerManager.__exitThread()
@@ -333,9 +390,41 @@ class ThreadWorkerManager():
             if ThreadWorkerManager.__systemExitThread:
                 ThreadWorkerManager.__systemExitThread.abort()
 
+def worker(
+        *args,
+        name: Optional[str] = "",
+        on_abort: Optional[FunctionType] = None,
+        keyboard_interrupt: Optional[bool] = True,
+        **kargs
+    ):
+    """
+    worker(function) -> threaded-function
+
+    A worker decorator.
+    Turn a main-thread function into a background-thread function automatically
+
+    Usage Example:
+    - @worker
+    - @worker("cool")
+    - @worker(name="looping backapp", keyboard_interrupt=True)
+    - @worker(keyboard_interrupt=True, on_abort: lambda: print("its over"))
+    """
+    if args:
+        if type(args[0]) == FunctionType:
+            def register(*dargs,**dkargs):
+                w = ThreadWorker(lambda: args[0](*dargs,**dkargs), name, on_abort, keyboard_interrupt)
+                w.work()
+                return w
+            return register
+        elif type(args[0]) == str:
+            name = args[0]
+            return ThreadWorkerManager.create_worker(name, *args[1:], on_abort=on_abort, keyboard_interrupt=keyboard_interrupt, **kargs)
+    else:
+        return ThreadWorkerManager.create_worker(name, on_abort=on_abort, keyboard_interrupt=keyboard_interrupt, **kargs)
+
 ### SHORTCUT ###
-worker = ThreadWorkerManager.worker
-run_as_Worker = ThreadWorkerManager.run_as_worker
+ThreadWorkerManager = StaticThreadWorkerManager()
+run_as_worker = ThreadWorkerManager.run_as_worker
 abort_worker = ThreadWorkerManager.abort_worker
 abort_all_worker = ThreadWorkerManager.abort_all_worker
 abort_thread = ThreadWorkerManager.abort_thread
