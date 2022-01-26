@@ -1,4 +1,5 @@
 # python-worker
+[![Downloads](https://static.pepy.tech/personalized-badge/python-worker?period=total&units=international_system&left_color=black&right_color=orange&left_text=Downloads)](https://pepy.tech/project/python-worker)
 
 ## Installation
 ```
