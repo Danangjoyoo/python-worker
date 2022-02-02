@@ -199,17 +199,19 @@ class StaticThreadWorkerManager():
         return runFunction()
 
     @staticmethod
-    def wait(*workers: ThreadWorker):
+    def wait(*workers: ThreadWorker, wait_all: bool = False):
         """
-        wait all workers to be done
+        wait defined workers to be done
         """
+        if wait_all: workers = ThreadWorkerManager.allWorkers.values()
         for w in workers: w.wait()
     
     @staticmethod
-    def await_workers(*workers: ThreadWorker) -> dict:
+    def await_workers(*workers: ThreadWorker, await_all: bool = False) -> dict:
         """
-        await all workers to be done and return a dict of results
+        await defined workers to be done and return a dict of results
         """
+        if await_all: workers = ThreadWorkerManager.allWorkers.values()
         res = {}
         for w in workers:
             res[w.name] = w.await_worker()

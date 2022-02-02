@@ -1,12 +1,13 @@
 Metadata-Version: 2.1
 Name: python-worker
-Version: 1.8.0
+Version: 1.8.1
 Summary: Simplify and master control (run and stop) the python threads (workers)
 Home-page: UNKNOWN
 Author: danangjoyoo (Agus Danangjoyo)
 Author-email: <agus.danangjoyo.blog@gmail.com>
 License: UNKNOWN
 Description: # python-worker
+        [![Downloads](https://static.pepy.tech/personalized-badge/python-worker?period=total&units=international_system&left_color=black&right_color=orange&left_text=Downloads)](https://pepy.tech/project/python-worker)
         
         ## Installation
         ```
