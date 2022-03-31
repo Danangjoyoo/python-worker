@@ -73,7 +73,7 @@ def go1():
 
 go1()
 ```
-
+---
 ## Basic Guide
 Getting return, wait and stop the thread/worker
 
@@ -116,8 +116,33 @@ def go(n,duration):
   goWorker.abort()
   ```
 
+---
 
-## Advanced Guide
+## Asynchronous Guide
+Well, if you have a coroutine function you can use `async_worker` instead
+```
+import asyncio
+from worker import async_worker
+
+@async_worker
+async def go():
+    print("this is inside coroutine!")
+    for i in range(10):
+        time.sleep(0.5)
+        print(i)
+    print("done!")
+    return "result!"
+
+go_worker = asyncio.run(go())
+
+## uncomment codes below to see the result
+# go_worker.wait()
+# go_result = go_worker
+```
+
+---
+
+## Additional Features
 Some advance features for thread/worker
 
 - Run undefined `@worker` function
@@ -286,3 +311,14 @@ go_interrupted()
   python -i myScript.py
   ```
   press CTRL+C while the process is running and see the results.
+
+--- 
+
+## Changelog
+- v1.8:
+  - Refactoring codes
+  - flexible `worker` declaration
+- v1.9:
+  - Added Asynchronous Worker for coroutine function using `@async_worker` decorator
+- future:
+  - In progress developing `process` worker
