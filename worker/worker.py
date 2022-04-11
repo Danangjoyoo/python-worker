@@ -370,7 +370,7 @@ class StaticThreadWorkerManager():
     @staticmethod
     def abort_all_thread():
         """
-        Abort all runnning background thread immeadiately.
+        Abort all runnning background thread immediately.
 
         No matter if it's a worker or not, it will be aborted. No background thread is running.        
         """

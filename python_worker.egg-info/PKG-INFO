@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: python-worker
-Version: 1.9.0
+Version: 1.9.2
 Summary: Simplify and master control (run and stop) the python threads (workers)
 Home-page: UNKNOWN
 Author: danangjoyoo (Agus Danangjoyo)
@@ -153,19 +153,59 @@ Description: # python-worker
         ## Additional Features
         Some advance features for thread/worker
         
-        - Run undefined `@worker` function
-        ```
-        import time
-        from worker import run_as_Worker
+        - ### abort specific workers
+          ```
+          import time
+          from worker import worker, abort_worker
         
-        def go4(n=1):
-          i = 0
-          while i < 1e3/2:
-            i += n
-            print(i)
-            time.sleep(0.001)
-          return i
-        ```
+          @worker
+          def go4(n=1):
+            i = 0
+            while i < 1e6/2:
+              i += n
+              print(i)
+              time.sleep(0.1)
+            return i
+        
+          go4_worker = go4(10)
+          time.sleep(3)
+          abort_worker(go4_worker)
+          ```
+        
+        - ### abort all workers (this only abort worker threads only)
+          ```
+          from worker import abort_all_worker
+        
+          # input all your workers here
+        
+          # abort all of it
+          abort_all_worker()
+        
+          ```
+          
+        - ### abort all threads (it will abort both all worker and non-worker threads)
+          ```
+          from worker import abort_all_thread
+        
+          # input all your threads here (including)
+        
+          # abort all of it
+          abort_all_thread()
+          ```
+        
+        - ### Run undefined `@worker` function
+          ```
+          import time
+          from worker import run_as_Worker
+        
+          def go4(n=1):
+            i = 0
+            while i < 1e3/2:
+              i += n
+              print(i)
+              time.sleep(0.001)
+            return i
+          ```
           there are 2 methods to run these :
           1. Using simple pattern
         		- simple use
@@ -177,20 +217,20 @@ Description: # python-worker
         			go4_worker = run_as_Worker(go4, 10, worker_name="go2 worker", worker_on_abort=lambda: print("horay"))
         			```			
           2. using `threading.Thread()` pattern
-        ```
-        go4_worker = run_as_Worker(target=go4, args=(10,), worker_name="go2 worker", worker_on_abort=lambda: print("horay"))
-        ```
+            ```
+            go4_worker = run_as_Worker(target=go4, args=(10,), worker_name="go2 worker", worker_on_abort=lambda: print("horay"))
+            ```
           
-        - Check workers
-        ```
-        from worker import ThreadWorkerManager
+        - ###  Check workers
+          ```
+          from worker import ThreadWorkerManager
         
-        ## all created workers
-        ThreadWorkerManager.list()
+          ## all created workers
+          ThreadWorkerManager.list()
         
-        ## All active/running workers only
-        ThreadWorkerManager.list(active_only=True)
-        ```
+          ## All active/running workers only
+          ThreadWorkerManager.list(active_only=True)
+          ```
         it will return the information
         ```
         >>> ThreadWorkerManager.list()
@@ -215,45 +255,6 @@ Description: # python-worker
         ==============================================================
         ```
         
-        
-        - abort specific workers
-        ```
-        import time
-        from worker import worker, abort_worker
-        
-        def go4(n=1):
-          i = 0
-          while i < 1e6/2:
-            i += n
-            print(i)
-            time.sleep(0.1)
-          return i
-        
-        go4_worker = go4(10)
-        time.sleep(3)
-        abort_worker(go4_worker)
-        ```
-        
-        - abort all workers (this only abort worker threads only)
-          ```
-          from worker import abort_all_worker
-        
-          # input all your workers here
-        
-          # abort all of it
-          abort_all_worker()
-        
-          ```
-          
-        - abort all threads (it will abort both all worker and non-worker threads)
-          ```
-          from worker import abort_all_worker
-        
-          # input all your threads here (including)
-        
-          # abort all of it
-          abort_all_thread()
-          ```
         
         ## Python Interactive Shell - Keyboard Interrupt (CTRL+C)
           When you run your scripts on interactive mode
