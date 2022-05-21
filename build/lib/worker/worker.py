@@ -1,9 +1,11 @@
 import inspect
 import os, time, sys, threading, ctypes, signal, keyboard, asyncio
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, overload, Type
 from types import FunctionType
 from .__workerhelp import help_msg
 
+ThreadedFunction = Type["ThreadedFunction"]
+AsyncThreadedFunction = Type["AsyncThreadedFunction"]
 
 class ThreadWorker():
     """
@@ -15,7 +17,7 @@ class ThreadWorker():
     def __init__(self, func, name="", on_abort=None, enable_keyboard_interrupt=True):
         if not name: name = "worker"
         if name in ThreadWorkerManager.allWorkers:
-            name = name+str(ThreadWorkerManager.counts)
+            name += str(ThreadWorkerManager.counts)
         ThreadWorkerManager.allWorkers[name] = self
         ThreadWorkerManager.counts += 1
         self.name = name
@@ -43,6 +45,7 @@ class ThreadWorker():
         self.work()
         return self
 
+    ## Properties ---------------------------
     def __get_working_time(self):
         t = time.perf_counter()-self.start_time
         lst = len(str(t).split(".")[0])
@@ -69,7 +72,11 @@ class ThreadWorker():
     def is_alive(self):
         return self.thread.is_alive()
 
+    ## Private Executor ---------------------------
     def __execute(self):
+        """
+        Setup and Execute the function in the background
+        """
         try:
             self.__finishStat = False
             if self.func:
@@ -89,6 +96,9 @@ class ThreadWorker():
                     print(self.id_mark,"OnAbortError",str(type(self.on_abort)), flush=True)
     
     async def __aexecute(self):
+        """
+        Setup and Execute the asynchronous function in the background
+        """
         try:
             self.__finishStat = False
             if self.func:
@@ -108,6 +118,9 @@ class ThreadWorker():
                     print(self.id_mark,"OnAbortError",str(type(self.on_abort)), flush=True)
 
     def work(self):
+        """
+        Execute function
+        """
         if inspect.iscoroutinefunction(self.rawfunc):
             self.thread = threading.Thread(target=lambda: asyncio.run(self.__aexecute()))
             self.thread.start()
@@ -116,6 +129,9 @@ class ThreadWorker():
             self.thread.start()
 
     def interrupt(self):
+        """
+        Interrupt whenever signal SIGINT is raised
+        """
         if self.enable_keyboard_interrupt:
             self.abort()
 
@@ -142,6 +158,14 @@ class ThreadWorker():
         """
         self.wait()
         return self.__ret
+
+    def restart(self):
+        """
+        restart the running worker with the same arguments
+        """
+        self.abort()
+        self.start_time = time.perf_counter()
+        return self()
 
     def __destroy(self):
         try:
@@ -174,7 +198,7 @@ class StaticThreadWorkerManager():
                 interrupt = bool(kargs["interrupt"])
             if not margs: 
                 e = "Error: on_abort requires worker name on decorator\nPlease read ThreadWorkerManager.help()"
-                raise BaseException(e)
+                raise Exception(e)
         if margs:
             if type(margs[0]) == FunctionType:
                 assert not inspect.iscoroutinefunction(margs[0]), "please use `async_worker` instead for coroutine function"
@@ -217,7 +241,7 @@ class StaticThreadWorkerManager():
                 interrupt = bool(kargs["interrupt"])
             if not margs: 
                 e = "Error: on_abort requires worker name on decorator\nPlease read ThreadWorkerManager.help()"
-                raise BaseException(e)
+                raise Exception(e)
         if margs:
             if type(margs[0]) == FunctionType:
                 assert inspect.iscoroutinefunction(margs[0]), "please use `worker` instead for non-coroutine function"
@@ -250,12 +274,11 @@ class StaticThreadWorkerManager():
                 return ThreadWorkerManager._workerDefinitionError()
         else:
             return ThreadWorkerManager._workerDefinitionError()
-    
 
     @staticmethod
     def _workerDefinitionError():
         e = "Error: Worker Decorator function or method! Please read ThreadWorkerManager.help()"
-        raise BaseException(e)
+        raise Exception(e)
 
     @staticmethod
     def run_as_worker(
@@ -267,13 +290,34 @@ class StaticThreadWorkerManager():
             args: Optional[Union[list, tuple]] = (),
             kargs: Optional[dict] = {},
             **function_kargs
-        ):
+        ) -> ThreadedFunction:
         """
         Run your existed function that is not defined as a worker to behave like worker
         """
         args = list(args)+list(function_args)
         kargs.update(function_kargs)
-        @worker(_worker_name,on_abort=_worker_on_abort,keyboard_interrupt=_keyboard_interrupt)
+        @ThreadWorkerManager.create_worker(_worker_name,on_abort=_worker_on_abort,keyboard_interrupt=_keyboard_interrupt)
+        def runFunction():
+            return target(*args,**kargs)
+        return runFunction()
+
+    @staticmethod
+    def run_as_async_worker(
+            target: FunctionType,
+            *function_args,
+            _worker_name: Optional[str] = "",
+            _worker_on_abort: Optional[FunctionType] = None,
+            _keyboard_interrupt: bool =True,
+            args: Optional[Union[list, tuple]] = (),
+            kargs: Optional[dict] = {},
+            **function_kargs
+        ) -> AsyncThreadedFunction:
+        """
+        Run your existed function that is not defined as a worker to behave like worker
+        """
+        args = list(args)+list(function_args)
+        kargs.update(function_kargs)
+        @ThreadWorkerManager.create_async_worker(_worker_name,on_abort=_worker_on_abort,keyboard_interrupt=_keyboard_interrupt)
         def runFunction():
             return target(*args,**kargs)
         return runFunction()
@@ -397,6 +441,12 @@ class StaticThreadWorkerManager():
                 worker.abort()
 
     @staticmethod
+    def restart_all():
+        cw = ThreadWorkerManager.allWorkers.copy()
+        for w in cw.values():
+            threading.Thread(target=lambda: w.restart()).start()
+
+    @staticmethod
     def help():
         print(help_msg)
 
@@ -472,80 +522,4 @@ class StaticThreadWorkerManager():
             if ThreadWorkerManager.__systemExitThread:
                 ThreadWorkerManager.__systemExitThread.abort()
 
-def worker(
-        *args,
-        name: Optional[str] = "",
-        on_abort: Optional[FunctionType] = None,
-        keyboard_interrupt: Optional[bool] = True,
-        **kargs
-    ):
-    """
-    worker(function) -> threaded-function
-
-    A worker decorator.
-    Turn a main-thread function into a background-thread function automatically
-
-    Usage Example:
-    - @worker
-    - @worker("cool")
-    - @worker(name="looping backapp", keyboard_interrupt=True)
-    - @worker(keyboard_interrupt=True, on_abort: lambda: print("its over"))
-    """
-    if args:
-        if type(args[0]) == FunctionType:
-            assert not inspect.iscoroutinefunction(args[0]), "please use `async_worker` instead for coroutine function"
-            def register(*dargs,**dkargs):
-                w = ThreadWorker(lambda: args[0](*dargs,**dkargs), name, on_abort, keyboard_interrupt)
-                w.work()
-                return w
-            return register
-        elif type(args[0]) == str:
-            name = args[0]
-            return ThreadWorkerManager.create_worker(name, *args[1:], on_abort=on_abort, keyboard_interrupt=keyboard_interrupt, **kargs)
-    else:
-        return ThreadWorkerManager.create_worker(name, on_abort=on_abort, keyboard_interrupt=keyboard_interrupt, **kargs)
-
-def async_worker(
-        *args,
-        name: Optional[str] = "",
-        on_abort: Optional[FunctionType] = None,
-        keyboard_interrupt: Optional[bool] = True,
-        **kargs
-    ):
-    """
-    async_worker(function) -> threaded-corotine-function
-
-    An asynchronous worker decorator.
-    Turn a main-thread coroutine function into a background-thread coroutine function automatically
-
-    Usage Example:
-    - @async_worker
-    - @async_worker("cool")
-    - @async_worker(name="looping backapp", keyboard_interrupt=True)
-    - @async_worker(keyboard_interrupt=True, on_abort: lambda: print("its over"))
-    """
-    if args:
-        if type(args[0]) == FunctionType:
-            assert inspect.iscoroutinefunction(args[0]), "please use `worker` instead for non-coroutine function"
-            async def register(*dargs,**dkargs):
-                async def worker_func():
-                    return await args[0](*dargs,**dkargs)
-                w = ThreadWorker(worker_func, name, on_abort, keyboard_interrupt)
-                w.work()
-                return w
-            return register
-        elif type(args[0]) == str:
-            name = args[0]
-            return ThreadWorkerManager.create_async_worker(name, *args[1:], on_abort=on_abort, keyboard_interrupt=keyboard_interrupt, **kargs)
-    else:
-        return ThreadWorkerManager.create_async_worker(name, on_abort=on_abort, keyboard_interrupt=keyboard_interrupt, **kargs)
-
-### SHORTCUT ###
 ThreadWorkerManager = StaticThreadWorkerManager()
-run_as_worker = ThreadWorkerManager.run_as_worker
-abort_worker = ThreadWorkerManager.abort_worker
-abort_all_worker = ThreadWorkerManager.abort_all_worker
-abort_thread = ThreadWorkerManager.abort_thread
-abort_all_thread = ThreadWorkerManager.abort_all_thread
-enableKeyboardInterrupt = ThreadWorkerManager.enableKeyboardInterrupt
-disableKeyboardInterrupt = ThreadWorkerManager.disableKeyboardInterrupt
