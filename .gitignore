@@ -1,1 +1,6 @@
-./worker/process.txt
+__pycache__
+*/__pycache__
+*/*/__pycache__
+dist
+build
+*.egg-info/
