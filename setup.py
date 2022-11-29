@@ -7,7 +7,7 @@ from pathlib import Path
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 
-VERSION = '1.10.1'
+VERSION = '1.10.2'
 DESCRIPTION = 'Simplify and master control (run and stop) the python threads (workers)'
 
 # Setting up
@@ -29,5 +29,6 @@ setup(
         "Operating System :: Unix",
         "Operating System :: MacOS :: MacOS X",
         "Operating System :: Microsoft :: Windows",
-    ]
+    ],
+    url="https://github.com/Danangjoyoo/python-worker"
 )

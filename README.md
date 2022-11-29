@@ -9,11 +9,6 @@ pip install python-worker
 ## Description
 A package to simplify the thread declaration directly either by using decorator or pass it through function. It also allows you to stop the running thread (worker) from any layer
 
-Developed by Danangjoyoo (c) 2020
-
-## Repository
-- [GitHub Repo](https://github.com/Danangjoyoo/python-worker)
-
 ---
 ## Basic Guide
 `@worker` will define a function as a thread object once it run
@@ -82,7 +77,7 @@ from worker import abort_all_worker
 
 abort_all_worker()
 ```
-  
+
 ### Abort all threads (it will abort both all worker and non-worker threads)
 ```
 from worker import abort_all_thread
@@ -109,7 +104,7 @@ How to get the return of threaded function ?
 def go(n):
     time.sleep(n)
     return "done"
-  
+
 go_worker = go(10)
 
 # this will await the worker to finished and return the value
@@ -135,13 +130,13 @@ it will return the information
 ```
 >>> ThreadWorkerManager.list()
 ==============================================================
-ID   |Name                |Active|Address        | WorkTime (s)   
+ID   |Name                |Active|Address        | WorkTime (s)
 ==============================================================
-0    |worker              |True  |0x7fdf1a977af0 | 4.97           
-1    |worker1             |True  |0x7fdf1a73d640 | 4.07           
-2    |worker2             |True  |0x7fdf1a73d9d0 | 3.83           
-3    |worker3             |True  |0x7fdf1a73dd00 | 3.62           
-4    |worker4             |True  |0x7fdf1a74b070 | 3.38           
+0    |worker              |True  |0x7fdf1a977af0 | 4.97
+1    |worker1             |True  |0x7fdf1a73d640 | 4.07
+2    |worker2             |True  |0x7fdf1a73d9d0 | 3.83
+3    |worker3             |True  |0x7fdf1a73dd00 | 3.62
+4    |worker4             |True  |0x7fdf1a74b070 | 3.38
 ==============================================================
 ```
 
@@ -166,11 +161,11 @@ ID   |Name                |Active|Address        | WorkTime (s)
   ThreadWorkerManager.enableKeyboardInterrupt()
   ```
   You could also activate exit thread which triggered by pressing the CTRL+Z. This also added an abort handler for worker into keyboard interrupt (CTRL+C).
-  ``` 
+  ```
   ThreadWorkerManager.disableKeyboardInterrupt(enable_exit_thread=True)
   ```
   Disabling abort handler for worker into keyboard interrupt (CTRL+C).
-  ``` 
+  ```
   ThreadWorkerManager.disableKeyboardInterrupt()
   ```
   Check handler status.
@@ -212,7 +207,7 @@ go_interrupted()
   ```
   press CTRL+C while the process is running and see the results.
 
---- 
+---
 
 ## Changelog
 - v1.8:
