@@ -1,11 +1,22 @@
 import inspect
-import os, time, sys, threading, ctypes, signal, keyboard, asyncio
+import os
+import time
+import sys
+import threading
+import ctypes
+import signal
+import keyboard
+import asyncio
+import logging
 from typing import Any, Optional, Union, overload, Type
 from types import FunctionType
-from .__workerhelp import help_msg
 
 ThreadedFunction = Type["ThreadedFunction"]
 AsyncThreadedFunction = Type["AsyncThreadedFunction"]
+
+
+logger = logging.getLogger()
+
 
 class ThreadWorker():
     """
@@ -14,18 +25,31 @@ class ThreadWorker():
     Return a worker object that behave as a thread running on background
     """
 
-    def __init__(self, func, name="", on_abort=None, enable_keyboard_interrupt=True):
-        if not name: name = "worker"
+    def __init__(
+        self,
+        func: FunctionType,
+        name: Optional[str] = "",
+        on_abort: Optional[FunctionType] = None,
+        enable_keyboard_interrupt: bool = True
+    ):
+        # static attributes
+        if not name:
+            name = "worker"
         if name in ThreadWorkerManager.allWorkers:
             name += str(ThreadWorkerManager.counts)
         ThreadWorkerManager.allWorkers[name] = self
         ThreadWorkerManager.counts += 1
+
+        # private attributes
+        self.__finish_stat = False
+        self.__ret = None
+        self.__work_time = 0
+
+        # public attributes
         self.name = name
         self.id = ThreadWorkerManager.counts
         self.func = None
         self.rawfunc = func
-        self.__finishStat = False
-        self.__ret = None
         self.thread = None
         self.is_aborted = False
         self.id_mark = f"[id={self.id}][{self.name}]"
@@ -33,8 +57,7 @@ class ThreadWorker():
         self.enable_keyboard_interrupt = enable_keyboard_interrupt
         self.on_abort = on_abort
         self.start_time = time.perf_counter()
-        self.__work_time = 0
-    
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         if inspect.iscoroutinefunction(self.rawfunc):
             async def work_func():
@@ -46,13 +69,6 @@ class ThreadWorker():
         return self
 
     ## Properties ---------------------------
-    def __get_working_time(self):
-        t = time.perf_counter()-self.start_time
-        lst = len(str(t).split(".")[0])
-        if lst < 10:
-            return round(t, 10-lst)
-        else:
-            return int(t)
 
     @property
     def work_time(self):
@@ -60,9 +76,17 @@ class ThreadWorker():
             self.__work_time = self.__get_working_time()
         return self.__work_time
 
-    @property       
+    def __get_working_time(self):
+            t = time.perf_counter() - self.start_time
+            lst = len(str(t).split(".")[0])
+            if lst < 10:
+                return round(t, 10-lst)
+            else:
+                return int(t)
+
+    @property
     def finished(self):
-        return self.__finishStat
+        return self.__finish_stat
 
     @property
     def ret(self):
@@ -78,44 +102,46 @@ class ThreadWorker():
         Setup and Execute the function in the background
         """
         try:
-            self.__finishStat = False
+            self.__finish_stat = False
             if self.func:
                 self.__ret = self.func()
             else:
                 self.__ret = self.rawfunc()
-            self.__finishStat = True
+            self.__finish_stat = True
         finally:
             self.__work_time = self.__get_working_time()
-            if not self.__finishStat:
-                self.__finishStat = True
+            if not self.__finish_stat:
+                self.__finish_stat = True
                 try:
-                    if self.aborted_by_kbInterrupt: print(self.id_mark,"KeyboardInterrupt", flush=True)
+                    if self.aborted_by_kbInterrupt:
+                        logger.debug(f"{self.id_mark} KeyboardInterrupt")
                     if self.on_abort:
                         self.on_abort()
-                except Exception as e:                      
-                    print(self.id_mark,"OnAbortError",str(type(self.on_abort)), flush=True)
-    
+                except Exception as e:
+                    logger.debug(f"{self.id_mark} OnAbortError {type(self.on_abort)}")
+
     async def __aexecute(self):
         """
         Setup and Execute the asynchronous function in the background
         """
         try:
-            self.__finishStat = False
+            self.__finish_stat = False
             if self.func:
                 self.__ret = await self.func()
             else:
                 self.__ret = await self.rawfunc()
-            self.__finishStat = True
+            self.__finish_stat = True
         finally:
             self.__work_time = self.__get_working_time()
-            if not self.__finishStat:
-                self.__finishStat = True
+            if not self.__finish_stat:
+                self.__finish_stat = True
                 try:
-                    if self.aborted_by_kbInterrupt: print(self.id_mark,"KeyboardInterrupt", flush=True)
+                    if self.aborted_by_kbInterrupt:
+                        logger.debug(f"{self.id_mark} KeyboardInterrupt")
                     if self.on_abort:
                         self.on_abort()
-                except Exception as e:                      
-                    print(self.id_mark,"OnAbortError",str(type(self.on_abort)), flush=True)
+                except Exception as e:
+                    logger.debug(f"{self.id_mark} OnAbortError {type(self.on_abort)}")
 
     def work(self):
         """
@@ -143,12 +169,12 @@ class ThreadWorker():
             self.is_aborted = True
             ThreadWorkerManager.abort_thread(self.thread)
 
-    def wait(self):
+    def wait(self, check_interval=0.01):
         """
         Wait the worker to finish
         """
         if self.is_alive:
-            while not self.finished: time.sleep(0.005)
+            while not self.finished: time.sleep(check_interval)
             return True
         return False
 
@@ -167,14 +193,8 @@ class ThreadWorker():
         self.start_time = time.perf_counter()
         return self()
 
-    def __destroy(self):
-        try:
-            self.abort()
-            del ThreadWorkerManager.allWorkers[self.name]
-        except Exception as e:
-            pass
 
-class StaticThreadWorkerManager():
+class __ThreadWorkerManager():
     """
     ThreadWorker Manager.
 
@@ -188,15 +208,15 @@ class StaticThreadWorkerManager():
     @staticmethod
     def create_worker(*margs,**kargs):
         on_abort = None
-        interrupt = True		
+        interrupt = True
         if kargs:
-            if "on_abort" in kargs: 
+            if "on_abort" in kargs:
                 on_abort = kargs["on_abort"]
-            if "keyboard_interrupt" in kargs: 
+            if "keyboard_interrupt" in kargs:
                 interrupt = bool(kargs["keyboard_interrupt"])
-            if "interrupt" in kargs: 
+            if "interrupt" in kargs:
                 interrupt = bool(kargs["interrupt"])
-            if not margs: 
+            if not margs:
                 e = "Error: on_abort requires worker name on decorator\nPlease read ThreadWorkerManager.help()"
                 raise Exception(e)
         if margs:
@@ -205,7 +225,7 @@ class StaticThreadWorkerManager():
                 def register(*args,**kargs):
                     w = ThreadWorker(
 						lambda: margs[0](*args,**kargs),
-						"worker", 
+						"worker",
 						on_abort, interrupt)
                     w.work()
                     return w
@@ -220,26 +240,26 @@ class StaticThreadWorkerManager():
                             workerName,
                             on_abort, interrupt)
                         w.work()
-                        return w                        
+                        return w
                     return register
                 return applying
             else:
                 return ThreadWorkerManager._workerDefinitionError()
         else:
             return ThreadWorkerManager._workerDefinitionError()
-    
+
     @staticmethod
     def create_async_worker(*margs,**kargs):
         on_abort = None
-        interrupt = True		
+        interrupt = True
         if kargs:
-            if "on_abort" in kargs: 
+            if "on_abort" in kargs:
                 on_abort = kargs["on_abort"]
-            if "keyboard_interrupt" in kargs: 
+            if "keyboard_interrupt" in kargs:
                 interrupt = bool(kargs["keyboard_interrupt"])
-            if "interrupt" in kargs: 
+            if "interrupt" in kargs:
                 interrupt = bool(kargs["interrupt"])
-            if not margs: 
+            if not margs:
                 e = "Error: on_abort requires worker name on decorator\nPlease read ThreadWorkerManager.help()"
                 raise Exception(e)
         if margs:
@@ -250,7 +270,7 @@ class StaticThreadWorkerManager():
                         return await args[0](*args,**kargs)
                     w = ThreadWorker(
 						worker_func,
-						"worker", 
+						"worker",
 						on_abort, interrupt)
                     w.work()
                     return w
@@ -323,13 +343,15 @@ class StaticThreadWorkerManager():
         return runFunction()
 
     @staticmethod
-    def wait(*workers: ThreadWorker, wait_all: bool = False):
+    def wait(*workers: ThreadWorker, wait_all: bool = False, check_interval: float = 0.01):
         """
         wait defined workers to be done
         """
-        if wait_all: workers = ThreadWorkerManager.allWorkers.values()
-        for w in workers: w.wait()
-    
+        if wait_all:
+            workers = ThreadWorkerManager.allWorkers.values()
+        for w in workers:
+            w.wait(check_interval)
+
     @staticmethod
     def await_workers(*workers: ThreadWorker, await_all: bool = False) -> dict:
         """
@@ -344,14 +366,14 @@ class StaticThreadWorkerManager():
     @staticmethod
     def list(active_only=False):
         formatStr = "{:<5}|{:<20}|{:<6}|{:<15}| {:<15}"
-        lineSeparator = lambda: print("{:=<62}".format(""))
+        lineSeparator = lambda: logger.debug("{:=<62}".format(""))
         lineSeparator()
-        print(formatStr.format("ID","Name","Active","Address","WorkTime (s)"))
+        logger.debug(formatStr.format("ID","Name","Active","Address","WorkTime (s)"))
         lineSeparator()
         for x, key in enumerate(ThreadWorkerManager.allWorkers):
             w = ThreadWorkerManager.allWorkers[key]
             f = str(w).split(">")[0].split(' ')[3][:15]
-            pline = lambda: print(formatStr.format(w.id,w.name,str(w.is_alive),f,w.work_time))
+            pline = lambda: logger.debug(formatStr.format(w.id,w.name,str(w.is_alive),f,w.work_time))
             if not active_only:
                 pline()
             else:
@@ -370,32 +392,50 @@ class StaticThreadWorkerManager():
         res = 0
         try:
             if not res:
-                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(threadObject.native_id, ctypes.py_object(SystemExit))
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                    threadObject.native_id,
+                    ctypes.py_object(SystemExit)
+                )
         except:
             pass
         try:
             if not res:
-                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(threadObject.ident, ctypes.py_object(SystemExit))
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                    threadObject.ident,
+                    ctypes.py_object(SystemExit)
+                )
         except:
             pass
         try:
             if not res:
-                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(threadObject.native_id), ctypes.py_object(SystemExit))
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                    ctypes.c_ulong(threadObject.native_id),
+                    ctypes.py_object(SystemExit)
+                )
         except:
             pass
         try:
             if not res:
-                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(threadObject.ident), ctypes.py_object(SystemExit))
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                    ctypes.c_ulong(threadObject.ident),
+                    ctypes.py_object(SystemExit)
+                )
         except:
             pass
         try:
             if not res:
-                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(threadObject.native_id), ctypes.py_object(SystemExit))
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                    ctypes.c_long(threadObject.native_id),
+                    ctypes.py_object(SystemExit)
+                )
         except:
             pass
         try:
             if not res:
-                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(threadObject.ident), ctypes.py_object(SystemExit))
+                res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                    ctypes.c_long(threadObject.ident),
+                    ctypes.py_object(SystemExit)
+                )
         except:
             pass
         return res
@@ -409,14 +449,14 @@ class StaticThreadWorkerManager():
             if all([forbidden not in str(workerObject.thread) for forbidden in ["MainThread","daemon"]]):
                 ThreadWorkerManager.abort_thread(workerObject.thread)
         except Exception as e:
-            print(e, flush=True)
+            logger.debug(e)
 
     @staticmethod
     def abort_all_thread():
         """
         Abort all runnning background thread immediately.
 
-        No matter if it's a worker or not, it will be aborted. No background thread is running.        
+        No matter if it's a worker or not, it will be aborted. No background thread is running.
         """
         for th in threading.enumerate():
             if all([forbidden not in str(th) for forbidden in ["MainThread","daemon"]]):
@@ -447,13 +487,14 @@ class StaticThreadWorkerManager():
             threading.Thread(target=lambda: w.restart()).start()
 
     @staticmethod
-    def help():
-        print(help_msg)
-
-    @staticmethod
     def interrupt_handler(sig, frame):
         timeout = False
-        getAliveThreadWithInterrupt = lambda: any([ThreadWorkerManager.allWorkers[key].is_alive for key in ThreadWorkerManager.allWorkers if ThreadWorkerManager.allWorkers[key].enable_keyboard_interrupt])
+        getAliveThreadWithInterrupt = lambda: any([
+            ThreadWorkerManager.allWorkers[key].is_alive
+            for key in ThreadWorkerManager.allWorkers
+            if ThreadWorkerManager.allWorkers[key].enable_keyboard_interrupt
+        ])
+
         if getAliveThreadWithInterrupt():
             try:
                 for key in ThreadWorkerManager.allWorkers:
@@ -462,7 +503,10 @@ class StaticThreadWorkerManager():
                         tw.aborted_by_kbInterrupt = True
                 stat = getAliveThreadWithInterrupt()
                 now = time.time()
-                if stat: print("[WORKER] Aborting..", flush=True)
+
+                if stat:
+                    logger.debug("[WORKER] Aborting..")
+
                 while stat:
                     [ThreadWorkerManager.abort_all_worker(keyboard_interrupt_only=True) for i in range(10)]
                     stat = getAliveThreadWithInterrupt()
@@ -472,9 +516,9 @@ class StaticThreadWorkerManager():
                         break
             finally:
                 if not timeout:
-                    print("\n[WORKER] All Workers Aborted", flush=True)
+                    logger.debug("\n[WORKER] All Workers Aborted")
                 else:
-                    print("[WORKER] Aborting Timeout", flush=True)
+                    logger.debug("[WORKER] Aborting Timeout")
         else:
             return signal.default_int_handler()
 
@@ -522,4 +566,4 @@ class StaticThreadWorkerManager():
             if ThreadWorkerManager.__systemExitThread:
                 ThreadWorkerManager.__systemExitThread.abort()
 
-ThreadWorkerManager = StaticThreadWorkerManager()
+ThreadWorkerManager = __ThreadWorkerManager()

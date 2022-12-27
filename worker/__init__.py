@@ -9,8 +9,10 @@ abort_all_thread = ThreadWorkerManager.abort_all_thread
 enableKeyboardInterrupt = ThreadWorkerManager.enableKeyboardInterrupt
 disableKeyboardInterrupt = ThreadWorkerManager.disableKeyboardInterrupt
 
+
 @overload
 def worker(function: FunctionType) -> ThreadedFunction: ...
+
 
 @overload
 def worker(
@@ -19,19 +21,22 @@ def worker(
     keyboard_interrupt: Optional[bool] = True
 ) -> ThreadedFunction: ...
 
+
 @overload
 def worker(
     on_abort: Optional[FunctionType] = None,
     keyboard_interrupt: Optional[bool] = True
 ) -> ThreadedFunction: ...
 
+
 def worker(
-        *args,
-        name: Optional[str] = "",
-        on_abort: Optional[FunctionType] = None,
-        keyboard_interrupt: Optional[bool] = True,
-        **kargs
-    ):
+    *args,
+    name: Optional[str] = "",
+    on_abort: Optional[FunctionType] = None,
+    keyboard_interrupt: Optional[bool] = True,
+    timeout: float = 0,
+    **kargs
+):
     """
     A worker decorator.
     Turn a main-thread function into a background-thread function automatically
@@ -74,12 +79,12 @@ def async_worker(
 ) -> AsyncThreadedFunction: ...
 
 def async_worker(
-        *args,
-        name: Optional[str] = "",
-        on_abort: Optional[FunctionType] = None,
-        keyboard_interrupt: Optional[bool] = True,
-        **kargs
-    ):
+    *args,
+    name: Optional[str] = "",
+    on_abort: Optional[FunctionType] = None,
+    keyboard_interrupt: Optional[bool] = True,
+    **kargs
+):
     """
     async_worker(function) -> threaded-corotine-function
 
@@ -107,3 +112,12 @@ def async_worker(
             return ThreadWorkerManager.create_async_worker(name, *args[1:], on_abort=on_abort, keyboard_interrupt=keyboard_interrupt, **kargs)
     else:
         return ThreadWorkerManager.create_async_worker(name, on_abort=on_abort, keyboard_interrupt=keyboard_interrupt, **kargs)
+
+
+from .process import *
+
+def process(function: FunctionType):
+    """
+    Create a process worker. This function will run your function in a separate GIL
+    """
+    return ProcessConnector.create_process(function)
