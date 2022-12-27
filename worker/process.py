@@ -1,12 +1,19 @@
 import asyncio
 import inspect
 import json
+import logging
 from multiprocessing import Process, Pipe
 from multiprocessing.connection import Connection
 from types import FunctionType
 
 
+logger = logging.getLogger()
+
+
 class ProcessConnector:
+    """
+    A process connector classes.
+    """
     def __init__(self, function):
         self.parent_con, self.child_con = None, None
         self.pid = 0
@@ -27,11 +34,11 @@ class ProcessConnector:
             try:
                 json.dumps(result)
             except Exception as e:
-                print(e)
+                logger.debug(e)
                 result = {}
             conn.send(result)
         except Exception as error:
-            print(error)
+            logger.debug(error)
             raise error
         finally:
             conn.close()
@@ -45,11 +52,11 @@ class ProcessConnector:
             try:
                 json.dumps(result)
             except Exception as e:
-                print(e)
+                logger.debug(e)
                 result = {}
             conn.send(result)
         except Exception as error:
-            print(error)
+            logger.debug(error)
             raise error
         finally:
             conn.close()

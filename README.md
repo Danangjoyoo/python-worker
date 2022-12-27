@@ -1,13 +1,31 @@
 # python-worker
 [![Downloads](https://static.pepy.tech/personalized-badge/python-worker?period=total&units=international_system&left_color=black&right_color=orange&left_text=Downloads)](https://pepy.tech/project/python-worker)
 
+---
+## Description
+A package to simplify the thread declaration directly either by using decorator or pass it through function. It also allows you to stop the running thread (worker) from any layer
+
+---
+
 ## Installation
 ```
 pip install python-worker
 ```
 
-## Description
-A package to simplify the thread declaration directly either by using decorator or pass it through function. It also allows you to stop the running thread (worker) from any layer
+---
+
+## Changelogs
+- v1.8:
+  - Refactoring codes
+  - flexible `worker` declaration
+- v1.9:
+  - Added Asynchronous Worker for coroutine function using `@async_worker` decorator
+- v1.10:
+  - Added `overload` typehints for `worker` and `async_worker`
+  - Added `restart` feature for worker
+- v2.0:
+  - Added `process` worker to enable run your function in different GIL (Global Interpreter Lock) which could give you a performance boost
+
 
 ---
 ## Basic Guide
@@ -19,9 +37,9 @@ from worker import worker
 
 @worker
 def go(n, sleepDur):
-  for i in range(n):
-    time.sleep(sleepDur)
-  print('done')
+    for i in range(n):
+      time.sleep(sleepDur)
+    print('done')
 
 go(100, 0.1)
 ```
@@ -48,6 +66,62 @@ go_worker = asyncio.run(go())
 ```
 
 ---
+
+## Process Guide
+A new feature called `process` is simply putting your worker on different GIL (Global Interpreter Lock) which could give you a performance boost.
+It's implementing `multiprocessing` instead of `multithreading` which at this stage is achieving the true form of `parallelism` which is run in different environment with your function call environment
+
+```
+import time
+import os
+from worker import process
+
+@process
+def go(n, sleepDur):
+    for i in range(n):
+        time.sleep(sleepDur)
+    print('done')
+
+go(100, 0.1)
+```
+your function `go` will run in different process.
+
+To check it, you can just print out the `os.getpid()`
+```
+import os
+from worker import worker, process
+
+
+@process
+def run_in_new_process(parent_pid):
+    print(f"from {parent_pid} running in a new process {os.getpid()}")
+    return "return from process"
+
+@worker
+def run_in_new_thread(parent_pid):
+    print(f"from {parent_pid} running in a new thread {os.getpid()}")
+    return "return from thread"
+
+
+print(f"this is on main thread {os.getpid()}")
+
+run_in_new_process(os.getpid())
+run_in_new_thread(os.getpid())
+```
+
+then run the script
+```
+(venv) danangjoyoo@danangjoyoo:~/dev/expython/multiproc$ python test2.py
+this is on main thread 58951
+from 58951 running in a new thread 58951
+from 58951 running in a new process 58953
+```
+
+you can see the different of process id between running in a new process and thread
+
+---
+
+# Additional Guides
 
 ## Kill / Stop / Abort the running worker
 You can abort some workers, all workers or even all threads..
@@ -206,17 +280,3 @@ go_interrupted()
   python -i myScript.py
   ```
   press CTRL+C while the process is running and see the results.
-
----
-
-## Changelog
-- v1.8:
-  - Refactoring codes
-  - flexible `worker` declaration
-- v1.9:
-  - Added Asynchronous Worker for coroutine function using `@async_worker` decorator
-- v1.10:
-  - Added `overload` typehints for `worker` and `async_worker`
-  - Added `restart` feature for worker
-- future:
-  - In progress developing `process` worker
