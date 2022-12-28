@@ -91,30 +91,36 @@ To check it, you can just print out the `os.getpid()`
 import os
 from worker import worker, process
 
+@worker(multiproc=True)
+def run_in_new_process_from_worker(parent_pid):
+    print(f"from {parent_pid} running in a new process {os.getpid()} - from worker.mutliproc==True")
+    return "return from process"
 
 @process
 def run_in_new_process(parent_pid):
-    print(f"from {parent_pid} running in a new process {os.getpid()}")
+    print(f"from {parent_pid} running in a new process {os.getpid()} - from process")
     return "return from process"
 
 @worker
 def run_in_new_thread(parent_pid):
-    print(f"from {parent_pid} running in a new thread {os.getpid()}")
+    print(f"from {parent_pid} running in a new thread {os.getpid()} - from worker.multiproc==False")
     return "return from thread"
 
 
 print(f"this is on main thread {os.getpid()}")
 
+run_in_new_process_from_worker(os.getpid())
 run_in_new_process(os.getpid())
 run_in_new_thread(os.getpid())
+
 ```
 
 then run the script
 ```
-(venv) danangjoyoo@danangjoyoo:~/dev/expython/multiproc$ python test2.py
-this is on main thread 58951
-from 58951 running in a new thread 58951
-from 58951 running in a new process 58953
+this is on main thread 29535
+from 29535 running in a new process 29537 - from worker.mutliproc==True
+from 29535 running in a new thread 29535 - from worker.multiproc==False
+from 29535 running in a new process 29538 - from process
 ```
 
 you can see the different of process id between running in a new process and thread

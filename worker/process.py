@@ -48,7 +48,7 @@ class ProcessConnector:
             input_params = conn.recv()
             args = input_params.get("args", [])
             kwargs = input_params.get("kwargs", {})
-            result = self.raw_func(*args, **kwargs)
+            result = await self.raw_func(*args, **kwargs)
             try:
                 json.dumps(result)
             except Exception as e:
@@ -64,9 +64,23 @@ class ProcessConnector:
     def create_and_run(self, *args, **kwargs):
         self.parent_con, self.child_con = Pipe()
         if self.is_async:
-            self.proc = Process(target=asyncio.run(self.execute_in_process_event_loop(self.child_con)))
+            self.proc = Process(
+                target=lambda: (
+                    asyncio.run(
+                        self.execute_in_process_event_loop(
+                            self.child_con
+                        )
+                    )
+                )
+            )
         else:
-            self.proc = Process(target=lambda: self.execute_in_process(self.child_con))
+            self.proc = Process(
+                target=lambda: (
+                    self.execute_in_process(
+                        self.child_con
+                    )
+                )
+            )
         self.proc.start()
         self.parent_con.send({"args": args, "kwargs": kwargs})
         return self.parent_con
@@ -87,8 +101,15 @@ class ProcessConnector:
     @staticmethod
     def create_process(function: FunctionType):
         assert isinstance(function, FunctionType), "only accept function for process"
-        def run_in_different_proc(*args, **kwargs):
-            pc = ProcessConnector(function)
-            pc.create_and_run(*args, **kwargs)
-            return pc
-        return run_in_different_proc
+        if inspect.iscoroutinefunction(function):
+            async def run_in_different_proc(*args, **kwargs):
+                pc = ProcessConnector(function)
+                pc.create_and_run(*args, **kwargs)
+                return pc
+            return run_in_different_proc
+        else:
+            def run_in_different_proc(*args, **kwargs):
+                pc = ProcessConnector(function)
+                pc.create_and_run(*args, **kwargs)
+                return pc
+            return run_in_different_proc

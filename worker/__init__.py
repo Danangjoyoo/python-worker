@@ -18,14 +18,16 @@ def worker(function: FunctionType) -> ThreadedFunction: ...
 def worker(
     name: Optional[str] = "",
     on_abort: Optional[FunctionType] = None,
-    keyboard_interrupt: Optional[bool] = True
+    keyboard_interrupt: Optional[bool] = True,
+    multiproc: bool = False
 ) -> ThreadedFunction: ...
 
 
 @overload
 def worker(
     on_abort: Optional[FunctionType] = None,
-    keyboard_interrupt: Optional[bool] = True
+    keyboard_interrupt: Optional[bool] = True,
+    multiproc: bool = False
 ) -> ThreadedFunction: ...
 
 
@@ -34,7 +36,7 @@ def worker(
     name: Optional[str] = "",
     on_abort: Optional[FunctionType] = None,
     keyboard_interrupt: Optional[bool] = True,
-    timeout: float = 0,
+    multiproc: bool = False,
     **kargs
 ):
     """
@@ -47,6 +49,9 @@ def worker(
     - @worker(name="looping backapp", keyboard_interrupt=True)
     - @worker(keyboard_interrupt=True, on_abort: lambda: print("its over"))
     """
+    if multiproc:
+        return process
+
     if args:
         if type(args[0]) == FunctionType:
             assert not inspect.iscoroutinefunction(args[0]), "please use `async_worker` instead for coroutine function"
