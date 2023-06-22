@@ -25,6 +25,8 @@ pip install python-worker
   - Added `restart` feature for worker
 - v2.0:
   - Added `process` worker to enable run your function in different GIL (Global Interpreter Lock) which could give you a performance boost
+- v2.2:
+  - Added `async_process` worker to enable run your async function / coroutine in different GIL (Global Interpreter Lock) which could give you a performance boost
 
 
 ---
@@ -54,6 +56,23 @@ import asyncio
 from worker import async_worker
 
 @async_worker
+async def go():
+    print("this is inside coroutine!")
+    for i in range(10):
+        time.sleep(0.5)
+        print(i)
+    print("done!")
+    return "result!"
+
+go_worker = asyncio.run(go())
+```
+
+or run it as a process
+```
+import asyncio
+from worker import async_process
+
+@async_process
 async def go():
     print("this is inside coroutine!")
     for i in range(10):
