@@ -92,7 +92,7 @@ class ProcessConnector:
             self.parent_con.close()
         return self.result
 
-    def wait(self, timeout):
+    def wait(self, timeout=10):
         self.proc.join(timeout)
 
     def receive(self):

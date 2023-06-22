@@ -128,7 +128,7 @@ def process(function: FunctionType):
     return ProcessConnector.create_process(function)
 
 
-async def async_process(function: FunctionType):
+def async_process(function: FunctionType):
     """
     Create an async process worker. This function will run your function in a separate GIL
     """
