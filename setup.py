@@ -7,7 +7,7 @@ from pathlib import Path
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 
-VERSION = '2.2.1'
+VERSION = '2.2.2'
 DESCRIPTION = 'Simplify and master control (run and stop) the python threads (workers)'
 
 # Setting up
@@ -20,7 +20,7 @@ setup(
     long_description_content_type="text/markdown",
     long_description=long_description,
     packages=find_packages(),
-    install_requires=["keyboard"],
+    install_requires=[],
     keywords=['python', 'threading', 'worker', 'async worker', 'async thread', 'abort thread', 'thread stopper', "thread manager", 'simple thread', "thread monitor"],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
