@@ -5,7 +5,6 @@ import sys
 import threading
 import ctypes
 import signal
-import keyboard
 import asyncio
 import logging
 from typing import Any, Optional, Union, overload, Type
@@ -525,8 +524,8 @@ class __ThreadWorkerManager():
     __systemExitThread = None
 
     @staticmethod
-    def __exitThread():
-        @ThreadWorkerManager.worker("systemExit",keyboard_interrupt=False)
+    def __exitThread(keyboard):
+        @ThreadWorkerManager.worker("systemExit", keyboard, keyboard_interrupt=False)
         def go():
             while True:
                 time.sleep(0.1)
@@ -553,7 +552,8 @@ class __ThreadWorkerManager():
             signal.signal(signal.SIGINT, ThreadWorkerManager.interrupt_handler)
             ThreadWorkerManager.keyboard_interrupt_handler_status = True
             if enable_exit_thread:
-                ThreadWorkerManager.__exitThread()
+                import keyboard
+                ThreadWorkerManager.__exitThread(keyboard)
 
     @staticmethod
     def disableKeyboardInterrupt():
